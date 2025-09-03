@@ -1,0 +1,43 @@
+#include <Arduino.h>
+#include <SPI.h>
+#include <GxEPD2_4C.h>
+#include <epd4c/GxEPD2_0579c_GDEY0579F51.h>
+
+// deine aktuelle Verkabelung am LOLIN S2 Mini
+#define EPD_RST   8
+#define EPD_DC    9
+#define EPD_CS    10
+#define EPD_BUSY  7
+#define EPD_SCK   36   // CLK
+#define EPD_MOSI  35   // DIN (MOSI)
+
+GxEPD2_4C<GxEPD2_0579c_GDEY0579F51, GxEPD2_0579c_GDEY0579F51::HEIGHT> display(
+  GxEPD2_0579c_GDEY0579F51(EPD_CS, EPD_DC, EPD_RST, EPD_BUSY)
+);
+
+void setup()
+{
+  Serial.begin(115200);
+  delay(100);
+
+  // SPI auf deine Pins legen
+  SPI.begin(EPD_SCK, -1, EPD_MOSI, EPD_CS);
+
+  Serial.println("Init...");
+  display.init();
+  display.setRotation(1);
+  display.setFullWindow();
+
+  // einfacher Test
+  display.firstPage();
+  do {
+    display.fillScreen(GxEPD_WHITE);
+    display.setTextColor(GxEPD_BLACK);
+    display.setCursor(20, 50);
+    display.print("Hello EPD!");
+  } while (display.nextPage());
+
+  Serial.println("Update done");
+}
+
+void loop() {}
