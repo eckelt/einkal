@@ -1,0 +1,542 @@
+[
+  {
+    "date": "2025-09-11",
+    "start": "2025-09-11T09:00:00+0200",
+    "end": "2025-09-11T09:15:00+0200",
+    "subject": "Competitiveness & Productivity standup",
+    "organizer": "Thouzeau, Nicolas",
+    "location": "",
+    "importance": "normal",
+    "hasAttachments": false,
+    "isOnlineMeeting": true,
+    "isRecurring": true,
+    "isMoved": false,
+    "numOf": {
+      "required": 6,
+      "optional": 0,
+      "accepted": 4,
+      "declined": 0,
+      "notResponded": 2
+    }
+  },
+  {
+    "date": "2025-09-11",
+    "start": "2025-09-11T10:00:00+0200",
+    "end": "2025-09-11T10:15:00+0200",
+    "subject": "Team Catalog's Daily Stand Up",
+    "organizer": "Borba, Luiz",
+    "location": "",
+    "importance": "normal",
+    "hasAttachments": false,
+    "isOnlineMeeting": true,
+    "isRecurring": true,
+    "isMoved": true,
+    "numOf": {
+      "required": 5,
+      "optional": 4,
+      "accepted": 6,
+      "declined": 1,
+      "notResponded": 2
+    }
+  },
+  {
+    "date": "2025-09-11",
+    "start": "2025-09-11T10:30:00+0200",
+    "end": "2025-09-11T11:00:00+0200",
+    "subject": "INHOUSE Engineering Management - Amplify checkpoint",
+    "organizer": "Thouzeau, Nicolas",
+    "location": "",
+    "importance": "normal",
+    "hasAttachments": false,
+    "isOnlineMeeting": true,
+    "isRecurring": true,
+    "isMoved": true,
+    "numOf": {
+      "required": 11,
+      "optional": 3,
+      "accepted": 6,
+      "declined": 1,
+      "notResponded": 6
+    }
+  },
+  {
+    "date": "2025-09-11",
+    "start": "2025-09-11T11:00:00+0200",
+    "end": "2025-09-11T12:00:00+0200",
+    "subject": "The INHOUSE Product & Development Update - Amplify at INHOUSE",
+    "organizer": "Thouzeau, Nicolas",
+    "location": "; DE-HB-COC-5.014-grosser-Besprechungsraum",
+    "importance": "normal",
+    "hasAttachments": false,
+    "isOnlineMeeting": true,
+    "isRecurring": false,
+    "isMoved": false,
+    "numOf": {
+      "required": 9,
+      "optional": 58,
+      "accepted": 50,
+      "declined": 1,
+      "notResponded": 15
+    }
+  },
+  {
+    "date": "2025-09-11",
+    "start": "2025-09-11T13:00:00+0200",
+    "end": "2025-09-11T14:00:00+0200",
+    "subject": "WG: GIT migration project",
+    "organizer": "Strothmann, Dominik",
+    "location": "",
+    "importance": "normal",
+    "hasAttachments": false,
+    "isOnlineMeeting": true,
+    "isRecurring": true,
+    "isMoved": true,
+    "numOf": {
+      "required": 5,
+      "optional": 1,
+      "accepted": 3,
+      "declined": 1,
+      "notResponded": 2
+    }
+  },
+  {
+    "date": "2025-09-11",
+    "start": "2025-09-11T14:08:00+0200",
+    "end": "2025-09-11T14:33:00+0200",
+    "subject": "Hackathon alignment",
+    "organizer": "Eckelt, Nils",
+    "location": "",
+    "importance": "normal",
+    "hasAttachments": false,
+    "isOnlineMeeting": true,
+    "isRecurring": false,
+    "isMoved": false,
+    "numOf": {
+      "required": 1,
+      "optional": 0,
+      "accepted": 1,
+      "declined": 0,
+      "notResponded": 0
+    }
+  },
+  {
+    "date": "2025-09-11",
+    "start": "2025-09-11T15:00:00+0200",
+    "end": "2025-09-11T15:30:00+0200",
+    "subject": "Grafana PoC | Inhouse PRD PoC alignment",
+    "organizer": "observability@eventim.de",
+    "location": "",
+    "importance": "normal",
+    "hasAttachments": false,
+    "isOnlineMeeting": true,
+    "isRecurring": false,
+    "isMoved": false,
+    "numOf": {
+      "required": 5,
+      "optional": 3,
+      "accepted": 3,
+      "declined": 0,
+      "notResponded": 4
+    }
+  },
+  {
+    "date": "2025-09-11",
+    "start": "2025-09-11T15:30:00+0200",
+    "end": "2025-09-11T16:30:00+0200",
+    "subject": "Visitor-Data messaging endpoint (Discussion)",
+    "organizer": "Najjar, Ammar",
+    "location": "",
+    "importance": "normal",
+    "hasAttachments": false,
+    "isOnlineMeeting": true,
+    "isRecurring": false,
+    "isMoved": false,
+    "numOf": {
+      "required": 6,
+      "optional": 0,
+      "accepted": 4,
+      "declined": 0,
+      "notResponded": 2
+    }
+  },
+  {
+    "date": "2025-09-12",
+    "start": "2025-09-12T09:00:00+0200",
+    "end": "2025-09-12T09:15:00+0200",
+    "subject": "Competitiveness & Productivity standup",
+    "organizer": "Thouzeau, Nicolas",
+    "location": "",
+    "importance": "normal",
+    "hasAttachments": false,
+    "isOnlineMeeting": true,
+    "isRecurring": true,
+    "isMoved": false,
+    "numOf": {
+      "required": 6,
+      "optional": 0,
+      "accepted": 4,
+      "declined": 0,
+      "notResponded": 2
+    }
+  },
+  {
+    "date": "2025-09-12",
+    "start": "2025-09-12T10:00:00+0200",
+    "end": "2025-09-12T10:15:00+0200",
+    "subject": "Team Catalog's Daily Stand Up",
+    "organizer": "Borba, Luiz",
+    "location": "",
+    "importance": "normal",
+    "hasAttachments": false,
+    "isOnlineMeeting": true,
+    "isRecurring": true,
+    "isMoved": false,
+    "numOf": {
+      "required": 5,
+      "optional": 4,
+      "accepted": 7,
+      "declined": 0,
+      "notResponded": 2
+    }
+  },
+  {
+    "date": "2025-09-12",
+    "start": "2025-09-12T11:30:00+0200",
+    "end": "2025-09-12T12:00:00+0200",
+    "subject": "Schnacken",
+    "organizer": "Rapsch, Thoralf",
+    "location": "",
+    "importance": "normal",
+    "hasAttachments": false,
+    "isOnlineMeeting": true,
+    "isRecurring": false,
+    "isMoved": false,
+    "numOf": {
+      "required": 2,
+      "optional": 0,
+      "accepted": 1,
+      "declined": 0,
+      "notResponded": 1
+    }
+  },
+  {
+    "date": "2025-09-12",
+    "start": "2025-09-12T13:00:00+0200",
+    "end": "2025-09-12T13:25:00+0200",
+    "subject": "Hackathon Round-ub",
+    "organizer": "Eckelt, Nils",
+    "location": "",
+    "importance": "normal",
+    "hasAttachments": false,
+    "isOnlineMeeting": true,
+    "isRecurring": false,
+    "isMoved": false,
+    "numOf": {
+      "required": 5,
+      "optional": 3,
+      "accepted": 0,
+      "declined": 0,
+      "notResponded": 8
+    }
+  },
+  {
+    "date": "2025-09-15",
+    "start": "2025-09-15T09:00:00+0200",
+    "end": "2025-09-15T09:15:00+0200",
+    "subject": "Competitiveness & Productivity standup",
+    "organizer": "Thouzeau, Nicolas",
+    "location": "",
+    "importance": "normal",
+    "hasAttachments": false,
+    "isOnlineMeeting": true,
+    "isRecurring": true,
+    "isMoved": false,
+    "numOf": {
+      "required": 6,
+      "optional": 0,
+      "accepted": 4,
+      "declined": 0,
+      "notResponded": 2
+    }
+  },
+  {
+    "date": "2025-09-15",
+    "start": "2025-09-15T10:00:00+0200",
+    "end": "2025-09-15T10:15:00+0200",
+    "subject": "Team Catalog's Daily Stand Up",
+    "organizer": "Borba, Luiz",
+    "location": "",
+    "importance": "normal",
+    "hasAttachments": false,
+    "isOnlineMeeting": true,
+    "isRecurring": true,
+    "isMoved": false,
+    "numOf": {
+      "required": 5,
+      "optional": 4,
+      "accepted": 7,
+      "declined": 0,
+      "notResponded": 2
+    }
+  },
+  {
+    "date": "2025-09-15",
+    "start": "2025-09-15T13:00:00+0200",
+    "end": "2025-09-15T13:30:00+0200",
+    "subject": "Releasemonitoring Inhouse 2025.3 - Pilot Rollout Decision",
+    "organizer": "Strothmann, Dominik",
+    "location": "",
+    "importance": "normal",
+    "hasAttachments": false,
+    "isOnlineMeeting": true,
+    "isRecurring": true,
+    "isMoved": true,
+    "numOf": {
+      "required": 2,
+      "optional": 22,
+      "accepted": 11,
+      "declined": 6,
+      "notResponded": 2
+    }
+  },
+  {
+    "date": "2025-09-15",
+    "start": "2025-09-15T13:30:00+0200",
+    "end": "2025-09-15T15:30:00+0200",
+    "subject": "Chapters | Operating Model",
+    "organizer": "Mueller, Matthias",
+    "location": "",
+    "importance": "normal",
+    "hasAttachments": false,
+    "isOnlineMeeting": true,
+    "isRecurring": false,
+    "isMoved": false,
+    "numOf": {
+      "required": 29,
+      "optional": 0,
+      "accepted": 15,
+      "declined": 2,
+      "notResponded": 10
+    }
+  },
+  {
+    "date": "2025-09-16",
+    "start": "2025-09-16T09:00:00+0200",
+    "end": "2025-09-16T09:15:00+0200",
+    "subject": "Competitiveness & Productivity standup",
+    "organizer": "Thouzeau, Nicolas",
+    "location": "",
+    "importance": "normal",
+    "hasAttachments": false,
+    "isOnlineMeeting": true,
+    "isRecurring": true,
+    "isMoved": false,
+    "numOf": {
+      "required": 6,
+      "optional": 0,
+      "accepted": 4,
+      "declined": 0,
+      "notResponded": 2
+    }
+  },
+  {
+    "date": "2025-09-16",
+    "start": "2025-09-16T10:00:00+0200",
+    "end": "2025-09-16T10:15:00+0200",
+    "subject": "Team Catalog's Daily Stand Up",
+    "organizer": "Borba, Luiz",
+    "location": "",
+    "importance": "normal",
+    "hasAttachments": false,
+    "isOnlineMeeting": true,
+    "isRecurring": true,
+    "isMoved": false,
+    "numOf": {
+      "required": 5,
+      "optional": 4,
+      "accepted": 7,
+      "declined": 0,
+      "notResponded": 2
+    }
+  },
+  {
+    "date": "2025-09-16",
+    "start": "2025-09-16T13:00:00+0200",
+    "end": "2025-09-16T14:00:00+0200",
+    "subject": "1Password Kennenlernen mit 1Password Consultant",
+    "organizer": "Wreden, Christian",
+    "location": "",
+    "importance": "normal",
+    "hasAttachments": false,
+    "isOnlineMeeting": true,
+    "isRecurring": false,
+    "isMoved": false,
+    "numOf": {
+      "required": 36,
+      "optional": 3,
+      "accepted": 12,
+      "declined": 7,
+      "notResponded": 14
+    }
+  },
+  {
+    "date": "2025-09-16",
+    "start": "2025-09-16T14:05:00+0200",
+    "end": "2025-09-16T15:00:00+0200",
+    "subject": "TMI-DEV-Sync",
+    "organizer": "Stegie, Jan",
+    "location": "",
+    "importance": "normal",
+    "hasAttachments": false,
+    "isOnlineMeeting": true,
+    "isRecurring": true,
+    "isMoved": false,
+    "numOf": {
+      "required": 2,
+      "optional": 8,
+      "accepted": 0,
+      "declined": 0,
+      "notResponded": 9
+    }
+  },
+  {
+    "date": "2025-09-17",
+    "start": "2025-09-17T09:00:00+0200",
+    "end": "2025-09-17T09:15:00+0200",
+    "subject": "Competitiveness & Productivity standup",
+    "organizer": "Thouzeau, Nicolas",
+    "location": "",
+    "importance": "normal",
+    "hasAttachments": false,
+    "isOnlineMeeting": true,
+    "isRecurring": true,
+    "isMoved": false,
+    "numOf": {
+      "required": 6,
+      "optional": 0,
+      "accepted": 4,
+      "declined": 0,
+      "notResponded": 2
+    }
+  },
+  {
+    "date": "2025-09-17",
+    "start": "2025-09-17T09:00:00+0200",
+    "end": "2025-09-17T12:00:00+0200",
+    "subject": "Architektenworkshop",
+    "organizer": "Orga_Eventim.Inhouse",
+    "location": "",
+    "importance": "normal",
+    "hasAttachments": false,
+    "isOnlineMeeting": true,
+    "isRecurring": true,
+    "isMoved": false,
+    "numOf": {
+      "required": 10,
+      "optional": 13,
+      "accepted": 9,
+      "declined": 3,
+      "notResponded": 10
+    }
+  },
+  {
+    "date": "2025-09-17",
+    "start": "2025-09-17T10:00:00+0200",
+    "end": "2025-09-17T10:15:00+0200",
+    "subject": "Team Catalog's Daily Stand Up",
+    "organizer": "Borba, Luiz",
+    "location": "",
+    "importance": "normal",
+    "hasAttachments": false,
+    "isOnlineMeeting": true,
+    "isRecurring": true,
+    "isMoved": false,
+    "numOf": {
+      "required": 5,
+      "optional": 4,
+      "accepted": 7,
+      "declined": 0,
+      "notResponded": 2
+    }
+  },
+  {
+    "date": "2025-09-17",
+    "start": "2025-09-17T11:00:00+0200",
+    "end": "2025-09-17T12:00:00+0200",
+    "subject": "Creation & Discovery, Fan & Traffic Kick-off",
+    "organizer": "Rebucci, Pedro",
+    "location": "",
+    "importance": "normal",
+    "hasAttachments": false,
+    "isOnlineMeeting": true,
+    "isRecurring": false,
+    "isMoved": false,
+    "numOf": {
+      "required": 4,
+      "optional": 38,
+      "accepted": 18,
+      "declined": 3,
+      "notResponded": 17
+    }
+  },
+  {
+    "date": "2025-09-17",
+    "start": "2025-09-17T11:00:00+0200",
+    "end": "2025-09-17T12:00:00+0200",
+    "subject": "Weekly Competitiveness & Productivity",
+    "organizer": "Thouzeau, Nicolas",
+    "location": "",
+    "importance": "normal",
+    "hasAttachments": false,
+    "isOnlineMeeting": true,
+    "isRecurring": true,
+    "isMoved": false,
+    "numOf": {
+      "required": 5,
+      "optional": 1,
+      "accepted": 5,
+      "declined": 0,
+      "notResponded": 1
+    }
+  },
+  {
+    "date": "2025-09-17",
+    "start": "2025-09-17T13:00:00+0200",
+    "end": "2025-09-17T14:00:00+0200",
+    "subject": "PM-EM Weekly",
+    "organizer": "Orga_Eventim.Inhouse",
+    "location": "; DE-HB-COC-5.053-Dreiecksraum-Inhouse (Restricted); ; DE-HB-COC-5.053-Dreiecksraum-Inhouse (Restricted)",
+    "importance": "normal",
+    "hasAttachments": false,
+    "isOnlineMeeting": true,
+    "isRecurring": true,
+    "isMoved": false,
+    "numOf": {
+      "required": 19,
+      "optional": 3,
+      "accepted": 13,
+      "declined": 0,
+      "notResponded": 9
+    }
+  },
+  {
+    "date": "2025-09-17",
+    "start": "2025-09-17T14:30:00+0200",
+    "end": "2025-09-17T16:30:00+0200",
+    "subject": "Grafana Cloud Demo & Workshop",
+    "organizer": "Schumacher, Maximilian",
+    "location": "DE-HB-YellowStage (Restricted)",
+    "importance": "normal",
+    "hasAttachments": false,
+    "isOnlineMeeting": true,
+    "isRecurring": false,
+    "isMoved": false,
+    "numOf": {
+      "required": 26,
+      "optional": 15,
+      "accepted": 11,
+      "declined": 3,
+      "notResponded": 26
+    }
+  }
+]
