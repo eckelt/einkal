@@ -4,6 +4,8 @@ from time import sleep
 from zoneinfo import ZoneInfo
 from datetime import datetime, timedelta, timezone
 
+CLIENT_ID = os.getenv('O365_CLIENT_ID') or input('Client ID: ')
+TENANT_ID = os.getenv('O365_TENANT_ID') or input('Tenant ID: ')
 
 AUTHORITY = f"https://login.microsoftonline.com/{TENANT_ID}"
 SCOPES = ["https://graph.microsoft.com/.default"]  # delegated scopes

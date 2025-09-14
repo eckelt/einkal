@@ -4,3 +4,7 @@
 .vscode/launch.json
 .vscode/ipch
 .DS_Store
+.env
+msal_token_cache.bin
+cdk/cdk.out/
+lambda/*/
