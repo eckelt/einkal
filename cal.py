@@ -132,7 +132,7 @@ for evt in data:
     }
     condensed.append(entry)
 
-with open("calendar-condensed.json", "w", encoding="utf-8") as f:
+with open("data/calendar-condensed.json", "w", encoding="utf-8") as f:
     json.dump(condensed, f, ensure_ascii=False, indent=2)
 
 for evt in condensed:

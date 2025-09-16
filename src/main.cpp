@@ -28,8 +28,6 @@ GxEPD2_4C<GxEPD2_0579c_GDEY0579F51, GxEPD2_0579c_GDEY0579F51::HEIGHT> display(
     GxEPD2_0579c_GDEY0579F51(EPD_CS, EPD_DC, EPD_RST, EPD_BUSY));
 
 // ====== WiFi + ICS URL ======
-const char *WIFI_SSID = "Nest";
-const char *WIFI_PASS = "absinthmachtblind";
 
 // ====== Sleep 30 minutes ======
 static const uint64_t SLEEP_MIN = 30ULL;
@@ -299,9 +297,13 @@ void setup()
     display.fillRect(0, 0, display.width(), 40, GxEPD_RED);
     display.setTextColor(GxEPD_WHITE);
     display.print(today);
-    display.drawBitmap(220, 8, epd_bitmap_wifi1, 12, 10, GxEPD_WHITE);
-    display.setCursor(233, 16);
+    int16_t x1, y1;
+    uint16_t w, h;
     display.setFont(&FreeSans6pt7b);
+    display.getTextBounds(WiFi.SSID(), 0, 0, &x1, &y1, &w, &h);
+    Serial.printf("Text bounds test %d x %d\n", w, h);
+    display.drawBitmap(270-w-14, 4, epd_bitmap_wifi1, 12, 10, GxEPD_WHITE);
+    display.setCursor(270-w-2, 12);
     display.print(WiFi.SSID());
     display.setTextColor(GxEPD_BLACK);
 
