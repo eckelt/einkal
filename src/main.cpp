@@ -9,12 +9,14 @@
 #include <Fonts/FreeSansBold12pt7b.h>
 #include <Fonts/FreeSansBold7pt7b.h>
 #include <Fonts/FreeSans6pt7b.h>
+#include <Fonts/Font5x7Fixed.h>
+#include <Fonts/Font4x5Fixed.h>
 #include <Icons.h>
 #include <time.h>
 #include <FS.h>
 #include <SPIFFS.h>
 #include <ArduinoJson.h>
-#include <CalLayout.h>  // local library in lib/CalLayout/
+#include <CalLayout.h> // local library in lib/CalLayout/
 
 // ==== Your display pins (as in your working demo) ====
 #define EPD_PWR 6
@@ -238,15 +240,14 @@ void drawTimelineAxis()
 
 // Helper: Draw events using external layout engine
 // simple helper: wrap text within width using current font, returns y after drawing
-int drawWrapped(int x, int y, int w, const String &text, int maxLines, int lineAdvance)
-{
+int drawWrapped(int x, int y, int w, const String &text, int maxLines, int lineAdvance) {
   int line = 0;
   int cursorX = x; int cursorY = y;
   String current;
   int lastBreakPos = -1;
-  for (int i=0;i<(int)text.length(); ++i) {
+  for (int i = 0; i < (int)text.length(); ++i) {
     char c = text[i];
-    if (c=='\n') {
+    if (c == '\n') {
       display.setCursor(cursorX, cursorY);
       display.print(current);
       current = ""; cursorY += lineAdvance; line++; if (line>=maxLines) return cursorY; continue;
@@ -274,7 +275,7 @@ int minutesToY(int minutesFromMidnight)
 {
   int hour = minutesFromMidnight / 60;
   int min = minutesFromMidnight % 60;
-  float rel = ( (hour - TIMELINE_START_HOUR) + min/60.0f );
+  float rel = ((hour - TIMELINE_START_HOUR) + min / 60.0f);
   return TIMELINE_Y_START + (int)(rel * PX_PER_HOUR);
 }
 
@@ -297,28 +298,31 @@ void drawEvents(const std::vector<Event> &events)
   for (auto &box : boxes) {
     const Event &evt = events[box.eventIndex];
     int yStart = timeToY(evt.start);
-    int yEnd   = timeToY(box.effectiveEnd);
-    if (yEnd <= yStart) yEnd = yStart + 22;
+    int yEnd = timeToY(box.effectiveEnd);
+    if (yEnd <= yStart)
+      yEnd = yStart + 22;
     int box_w;
-  if (box.groupColumns == 2) box_w = (innerWidth - gap)/2; else box_w = (innerWidth - gap*(box.groupColumns-1)) / box.groupColumns;
-  int box_x = xBase + box.column * (box_w + gap);
+    if (box.groupColumns == 2) box_w = (innerWidth - gap)/2; else box_w = (innerWidth - gap*(box.groupColumns-1)) / box.groupColumns;
+    int span = max(1, box.colSpan);
+    int box_x = xBase + box.column * (box_w + gap);
+    int box_total_w = box_w * span + gap * (span - 1);
     int box_y = yStart + 1;
     int box_h = max(22, yEnd - yStart - 2);
 
     // Cancelled style: white fill, yellow border; else yellow fill
     if (evt.isCanceled) {
-      display.fillRect(box_x, box_y, box_w, box_h, GxEPD_WHITE);
-      display.drawRect(box_x, box_y, box_w, box_h, GxEPD_YELLOW);
+      display.fillRect(box_x, box_y, box_total_w, box_h, GxEPD_WHITE);
+      display.drawRect(box_x, box_y, box_total_w, box_h, GxEPD_YELLOW);
     } else {
-      display.fillRect(box_x, box_y, box_w, box_h, GxEPD_YELLOW);
+      display.fillRect(box_x, box_y, box_total_w, box_h, GxEPD_YELLOW);
     }
 
     int textLeft = box_x + 4;
-    int textWidth = box_w - 8;
+    int textWidth = box_total_w - 8;
     int cursorY = box_y + 12;
     display.setFont(&FreeSansBold7pt7b);
     cursorY = drawWrapped(textLeft, cursorY, textWidth, evt.title, 2, 14);
-    display.setFont(&FreeSans6pt7b);
+    display.setFont(&Font5x7Fixed);
     cursorY = drawWrapped(textLeft, cursorY, textWidth, evt.organizer, 1, 12);
     drawWrapped(textLeft, cursorY, textWidth, evt.location, 1, 12);
 
@@ -338,21 +342,46 @@ void drawEvents(const std::vector<Event> &events)
   }
 }
 
+// Draw update time at bottom right using 4x5 fixed font
+void drawUpdateTimestamp() {
+  struct tm ti;
+  if (!getLocalTime(&ti))
+    return;
+  char buf[6];
+  snprintf(buf, sizeof(buf), "%02d:%02d", ti.tm_hour, ti.tm_min);
+  display.setFont(&Font4x5Fixed);
+  int16_t x1, y1;
+  uint16_t w, h;
+  display.getTextBounds(buf, 0, 0, &x1, &y1, &w, &h);
+  int x = display.width() - w - 4;
+  int y = display.height() - 4; // baseline near bottom
+  display.setTextColor(GxEPD_DARKGREY);
+  display.setCursor(x, y);
+  display.print(buf);
+}
 
-      void getGermanDateHeader(String &weekdayOut, String &dateOut)
-      {
-        static const char *WEEKDAY_DE[7] = {"Sonntag","Montag","Dienstag","Mittwoch","Donnerstag","Freitag","Samstag"};
-        static const char *MONTH_DE[12] = {"Januar","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"};
-        struct tm timeinfo;
-        if (!getLocalTime(&timeinfo)) {
-          weekdayOut = ""; dateOut = ""; return; }
-        int w = timeinfo.tm_wday; if (w < 0 || w > 6) w = 0;
-        int m = timeinfo.tm_mon; if (m < 0 || m > 11) m = 0;
-        weekdayOut = WEEKDAY_DE[w];
-        // Some fonts may lack umlauts; optional fallback if needed
-        // if (weekdayOut.indexOf("ä") >= 0) { /* keep it; font likely supports */ }
-        dateOut = String(timeinfo.tm_mday) + ". " + MONTH_DE[m];
-      }
+void getGermanDateHeader(String &weekdayOut, String &dateOut)
+{
+  static const char *WEEKDAY_DE[7] = {"Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"};
+  static const char *MONTH_DE[12] = {"Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"};
+  struct tm timeinfo;
+  if (!getLocalTime(&timeinfo))
+  {
+    weekdayOut = "";
+    dateOut = "";
+    return;
+  }
+  int w = timeinfo.tm_wday;
+  if (w < 0 || w > 6)
+    w = 0;
+  int m = timeinfo.tm_mon;
+  if (m < 0 || m > 11)
+    m = 0;
+  weekdayOut = WEEKDAY_DE[w];
+  // Some fonts may lack umlauts; optional fallback if needed
+  // if (weekdayOut.indexOf("ä") >= 0) { /* keep it; font likely supports */ }
+  dateOut = String(timeinfo.tm_mday) + ". " + MONTH_DE[m];
+}
 void setup()
 {
   Serial.begin(115200);
@@ -373,8 +402,14 @@ void setup()
     esp_deep_sleep_start();
   }
 
-  // Zeit per NTP holen
+  // Zeit per NTP holen (erst UTC, dann Zeitzone setzen)
   configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+  // Deutsche Zeitzone mit Sommerzeit-Regeln: CET/CEST
+  setenv("TZ", "CET-1CEST,M3.5.0,M10.5.0/3", 1); // letzter So im März 02:00 -> +1, letzter So im Okt 03:00 zurück
+  tzset();
+  // optional kurz warten bis Zeit da ist
+  struct tm tmpCheck; int retries=0;
+  while (!getLocalTime(&tmpCheck) && retries < 20) { delay(200); retries++; }
 
   // SPIFFS already mounted above
 
@@ -397,8 +432,7 @@ void setup()
     return;
 
   // Only update display if date changed
-  if (isDateChanged(today.c_str(), lastDate))
-  {
+  if (isDateChanged(today.c_str(), lastDate)) {
     strncpy(lastDate, today.c_str(), sizeof(lastDate));
     JsonArray events = doc.as<JsonArray>();
     std::vector<Event> todaysEvents = findTodaysEvents(events, today);
@@ -425,26 +459,27 @@ void setup()
     display.setCursor(10, 46);
     display.print(dateLine);
 
-     // Battery icon
-    display.drawBitmap(270-18, 6, epd_bitmap_batt, 16, 9, GxEPD_WHITE);
-    display.fillRect(270-18+2, 8, 11, 5, GxEPD_WHITE);
+    // Battery icon
+    display.drawBitmap(270 - 18, 6, epd_bitmap_batt, 16, 9, GxEPD_WHITE);
+    display.fillRect(270 - 18 + 2, 8, 11, 5, GxEPD_WHITE);
 
-     // Bluetooth icon
-    display.drawBitmap(270-18-18, 4, epd_bitmap_bt, 11, 12, GxEPD_WHITE);
+    // Bluetooth icon
+    display.drawBitmap(270 - 18 - 18, 4, epd_bitmap_bt, 11, 12, GxEPD_WHITE);
 
-     // WiFi SSID
+    // WiFi SSID
     int16_t x1, y1;
     uint16_t w, h;
     display.setFont(&FreeSans6pt7b);
     display.getTextBounds(WiFi.SSID(), 0, 0, &x1, &y1, &w, &h);
     Serial.printf("Text bounds test %d x %d\n", w, h);
-    display.drawBitmap(270-18-24-w-15, 5, epd_bitmap_wifi, 13, 10, GxEPD_WHITE);
-    display.setCursor(270-18-24-w, 13);
+    display.drawBitmap(270 - 18 - 24 - w - 15, 5, epd_bitmap_wifi, 13, 10, GxEPD_WHITE);
+    display.setCursor(270 - 18 - 24 - w, 13);
     display.print(WiFi.SSID());
     display.setTextColor(GxEPD_BLACK);
 
     drawTimelineAxis();
     drawEvents(todaysEvents);
+    drawUpdateTimestamp();
 
     display.display(true);
   }

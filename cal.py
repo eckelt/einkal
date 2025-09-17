@@ -122,6 +122,7 @@ for evt in data:
         "isOnlineMeeting": evt.get("isOnlineMeeting", False),
         "isRecurring": isRecurring,
         "isMoved": isMoved,
+        "isCancelled": evt.get("isCancelled", False),   
         "numOf": {
             "required": sum(1 for a in attendees if a.get("type") == "required"),
             "optional": sum(1 for a in attendees if a.get("type") == "optional"),

@@ -87,9 +87,32 @@ std::vector<CalLayoutBox> computeCalendarLayout(const std::vector<CalLayoutInput
             if (iv.endMin > colEnd[col]) colEnd[col] = iv.endMin;
         }
         int totalCols = (int)colEnd.size();
+        // Pre-create boxes with span=1
         for (auto &lp : local) {
             const auto &iv = intervals[lp.vecIdx];
-            result.push_back({iv.idx, lp.col, totalCols, iv.endIso});
+            result.push_back({iv.idx, lp.col, totalCols, 1, iv.endIso});
+        }
+        // Compute possible expansion to right for each
+        for (auto &box : result) {
+            if (box.groupColumns != totalCols) continue; // skip boxes from earlier groups
+            // Build overlap occupancy per column for time window of this event
+            const auto &iv = intervals[ local[ box.column ].vecIdx ];
+            int startMin = iv.startMin;
+            int endMin = iv.endMin;
+            // try to extend while next column has no overlapping event in that time slice
+            for (int nextCol = box.column + 1; nextCol < totalCols; ++nextCol) {
+                bool freeCol = true;
+                for (auto &lp : local) {
+                    if (lp.col == nextCol) {
+                        const auto &other = intervals[lp.vecIdx];
+                        bool overlap = !(other.endMin <= startMin || other.startMin >= endMin);
+                        if (overlap) { freeCol = false; break; }
+                    }
+                }
+                if (freeCol) {
+                    box.colSpan++;
+                } else break;
+            }
         }
     }
     std::sort(result.begin(), result.end(), [&](const CalLayoutBox& a, const CalLayoutBox& b){

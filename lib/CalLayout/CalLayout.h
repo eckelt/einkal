@@ -11,8 +11,9 @@ struct CalLayoutInput {
 
 struct CalLayoutBox {
     size_t eventIndex;   // index into original events vector
-    int column;          // assigned column within its overlap group
+    int column;          // assigned column within its overlap group (leftmost if spanning)
     int groupColumns;    // total columns in that overlap group
+    int colSpan;          // how many columns this event spans (>=1)
     String effectiveEnd; // resolved end ISO (with +1h fallback applied)
 };
 
