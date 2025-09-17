@@ -38,8 +38,8 @@ RTC_DATA_ATTR char lastDate[11] = ""; // RTC memory for last date (YYYY-MM-DD)
 // Timeline constants
 const int TIMELINE_START_HOUR = 8;
 const int TIMELINE_END_HOUR = 18;
-const int TIMELINE_Y_START = 60;
-const int TIMELINE_Y_END = 760;
+const int TIMELINE_Y_START = 65;
+const int TIMELINE_Y_END = 780;
 const int TIMELINE_HEIGHT = TIMELINE_Y_END - TIMELINE_Y_START;
 const int TIMELINE_HOURS = TIMELINE_END_HOUR - TIMELINE_START_HOUR;
 const float PX_PER_HOUR = (float)TIMELINE_HEIGHT / TIMELINE_HOURS;
@@ -185,6 +185,7 @@ struct Event
   bool isRecurring;
   bool isMoved;
   bool hasAttachments;
+  bool isCanceled; // new
 };
 
 std::vector<Event> findTodaysEvents(JsonArray events, const String &today)
@@ -196,6 +197,12 @@ std::vector<Event> findTodaysEvents(JsonArray events, const String &today)
     const char *end = evt["end"];
     String title = evt["summary"] | evt["subject"] | "(kein Titel)";
     String location = evt["location"] | "";
+    if (location.startsWith("; ")) // truncate long URLs
+      location = location.substring(2, location.length() - 2);
+    // Perform replacements separately (String::replace returns void)
+    location.replace("DE-", "");
+    location.replace("HB-", "");
+    location.replace("COC-", "");
     String organizer = evt["organizer"] | "";
     String startStr = String(start);
     String endStr = String(end);
@@ -204,9 +211,11 @@ std::vector<Event> findTodaysEvents(JsonArray events, const String &today)
     bool isRecurring = evt["isRecurring"] | false;
     bool isMoved = evt["isMoved"] | false;
     bool hasAttachments = evt["hasAttachments"] | false;
+    const char* status = evt["status"] | evt["eventStatus"] | ""; // try multiple keys
+    bool isCanceled = evt["isCancelled"] | false;
     if (strncmp(start, today.c_str(), 10) == 0)
     {
-      todaysEvents.push_back({title, startStr, endStr, location, organizer, isImportant, isOnlineMeeting, isRecurring, isMoved, hasAttachments});
+      todaysEvents.push_back({title, startStr, endStr, location, organizer, isImportant, isOnlineMeeting, isRecurring, isMoved, hasAttachments, isCanceled});
     }
   }
   return todaysEvents;
@@ -228,6 +237,47 @@ void drawTimelineAxis()
 }
 
 // Helper: Draw events using external layout engine
+// simple helper: wrap text within width using current font, returns y after drawing
+int drawWrapped(int x, int y, int w, const String &text, int maxLines, int lineAdvance)
+{
+  int line = 0;
+  int cursorX = x; int cursorY = y;
+  String current;
+  int lastBreakPos = -1;
+  for (int i=0;i<(int)text.length(); ++i) {
+    char c = text[i];
+    if (c=='\n') {
+      display.setCursor(cursorX, cursorY);
+      display.print(current);
+      current = ""; cursorY += lineAdvance; line++; if (line>=maxLines) return cursorY; continue;
+    }
+    current += c;
+    int16_t bx, by; uint16_t bw,bh; display.getTextBounds(current, 0,0,&bx,&by,&bw,&bh);
+    if (bw > (uint16_t)w) {
+      // emit previous word
+      int cutPos = current.lastIndexOf(' ');
+      if (cutPos <= 0) cutPos = current.length()-1; // force cut
+      String out = current.substring(0, cutPos);
+      if (out.length()==0) out = current.substring(0, current.length()-1);
+      display.setCursor(cursorX, cursorY);
+      display.print(out);
+      cursorY += lineAdvance; line++; if (line>=maxLines) return cursorY;
+      current = current.substring(cutPos); current.trim();
+    }
+  }
+  if (current.length()) { display.setCursor(cursorX, cursorY); display.print(current); cursorY += lineAdvance; }
+  return cursorY;
+}
+
+// minutes->Y helper for segments
+int minutesToY(int minutesFromMidnight)
+{
+  int hour = minutesFromMidnight / 60;
+  int min = minutesFromMidnight % 60;
+  float rel = ( (hour - TIMELINE_START_HOUR) + min/60.0f );
+  return TIMELINE_Y_START + (int)(rel * PX_PER_HOUR);
+}
+
 void drawEvents(const std::vector<Event> &events)
 {
   display.setFont(&FreeSansBold7pt7b);
@@ -236,49 +286,41 @@ void drawEvents(const std::vector<Event> &events)
     display.print("Keine Termine heute.");
     return;
   }
-
-  // Build layout input
-  std::vector<CalLayoutInput> inputs;
-  inputs.reserve(events.size());
+  std::vector<CalLayoutInput> inputs; inputs.reserve(events.size());
   for (auto &e : events) inputs.push_back({e.start, e.end});
-
-  auto layout = computeCalendarLayout(inputs);
+  auto boxes = computeCalendarLayout(inputs);
 
   const int xBase = 20;
   const int innerWidth = 248;
   const int gap = 4;
 
-  for (auto &box : layout) {
+  for (auto &box : boxes) {
     const Event &evt = events[box.eventIndex];
-    // Compute y positions using original start and effective end
     int yStart = timeToY(evt.start);
-    int yEnd = timeToY(box.effectiveEnd);
+    int yEnd   = timeToY(box.effectiveEnd);
     if (yEnd <= yStart) yEnd = yStart + 22;
-
-    int cols = box.groupColumns;
     int box_w;
-    if (cols == 2) {
-      box_w = (innerWidth - gap) / 2; // half width rule
-    } else {
-      box_w = (innerWidth - gap * (cols - 1)) / cols;
-    }
-    int box_x = xBase + box.column * (box_w + gap);
+  if (box.groupColumns == 2) box_w = (innerWidth - gap)/2; else box_w = (innerWidth - gap*(box.groupColumns-1)) / box.groupColumns;
+  int box_x = xBase + box.column * (box_w + gap);
     int box_y = yStart + 1;
     int box_h = max(22, yEnd - yStart - 2);
 
-    display.fillRect(box_x, box_y, box_w, box_h, GxEPD_YELLOW);
+    // Cancelled style: white fill, yellow border; else yellow fill
+    if (evt.isCanceled) {
+      display.fillRect(box_x, box_y, box_w, box_h, GxEPD_WHITE);
+      display.drawRect(box_x, box_y, box_w, box_h, GxEPD_YELLOW);
+    } else {
+      display.fillRect(box_x, box_y, box_w, box_h, GxEPD_YELLOW);
+    }
 
+    int textLeft = box_x + 4;
+    int textWidth = box_w - 8;
+    int cursorY = box_y + 12;
     display.setFont(&FreeSansBold7pt7b);
-    display.setCursor(box_x + 4, box_y + 14);
-    int maxChars = (box_w / 6) * 2; // crude fit heuristic
-    display.write(evt.title.substring(0, max(4, maxChars)).c_str());
-
+    cursorY = drawWrapped(textLeft, cursorY, textWidth, evt.title, 2, 14);
     display.setFont(&FreeSans6pt7b);
-    display.setCursor(box_x + 4, box_y + 28);
-    display.write(evt.organizer.substring(0, max(4, maxChars)).c_str());
-
-    display.setCursor(box_x + 4, box_y + 40);
-    display.write(evt.location.substring(0, max(4, maxChars)).c_str());
+    cursorY = drawWrapped(textLeft, cursorY, textWidth, evt.organizer, 1, 12);
+    drawWrapped(textLeft, cursorY, textWidth, evt.location, 1, 12);
 
     int iconX = box_x + box_w - 14;
     if (evt.isRecurring) {
@@ -296,6 +338,21 @@ void drawEvents(const std::vector<Event> &events)
   }
 }
 
+
+      void getGermanDateHeader(String &weekdayOut, String &dateOut)
+      {
+        static const char *WEEKDAY_DE[7] = {"Sonntag","Montag","Dienstag","Mittwoch","Donnerstag","Freitag","Samstag"};
+        static const char *MONTH_DE[12] = {"Januar","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"};
+        struct tm timeinfo;
+        if (!getLocalTime(&timeinfo)) {
+          weekdayOut = ""; dateOut = ""; return; }
+        int w = timeinfo.tm_wday; if (w < 0 || w > 6) w = 0;
+        int m = timeinfo.tm_mon; if (m < 0 || m > 11) m = 0;
+        weekdayOut = WEEKDAY_DE[w];
+        // Some fonts may lack umlauts; optional fallback if needed
+        // if (weekdayOut.indexOf("ä") >= 0) { /* keep it; font likely supports */ }
+        dateOut = String(timeinfo.tm_mday) + ". " + MONTH_DE[m];
+      }
 void setup()
 {
   Serial.begin(115200);
@@ -354,13 +411,35 @@ void setup()
     display.fillRect(0, 0, display.width(), 40, GxEPD_RED);
     display.setTextColor(GxEPD_WHITE);
     display.print(today);
+    String wday, dateLine;
+    getGermanDateHeader(wday, dateLine);
+    // Header bar
+    int headerH = 56;
+    display.fillRect(0, 0, display.width(), headerH, GxEPD_RED);
+    display.setTextColor(GxEPD_WHITE);
+    // Weekday (bold large)
+    display.setFont(&FreeSansBold12pt7b);
+    display.setCursor(10, 22);
+    display.print(wday);
+    // Date line (smaller bold or same font if you prefer size consistency)
+    display.setCursor(10, 46);
+    display.print(dateLine);
+
+     // Battery icon
+    display.drawBitmap(270-18, 6, epd_bitmap_batt, 16, 9, GxEPD_WHITE);
+    display.fillRect(270-18+2, 8, 11, 5, GxEPD_WHITE);
+
+     // Bluetooth icon
+    display.drawBitmap(270-18-18, 4, epd_bitmap_bt, 11, 12, GxEPD_WHITE);
+
+     // WiFi SSID
     int16_t x1, y1;
     uint16_t w, h;
     display.setFont(&FreeSans6pt7b);
     display.getTextBounds(WiFi.SSID(), 0, 0, &x1, &y1, &w, &h);
     Serial.printf("Text bounds test %d x %d\n", w, h);
-    display.drawBitmap(270-w-14, 4, epd_bitmap_wifi1, 12, 10, GxEPD_WHITE);
-    display.setCursor(270-w-2, 12);
+    display.drawBitmap(270-18-24-w-15, 5, epd_bitmap_wifi, 13, 10, GxEPD_WHITE);
+    display.setCursor(270-18-24-w, 13);
     display.print(WiFi.SSID());
     display.setTextColor(GxEPD_BLACK);
 
@@ -376,8 +455,8 @@ void setup()
 
   // Deep sleep for 30 minutes
   Serial.println("Going to deep sleep...");
-  esp_sleep_enable_timer_wakeup(SLEEP_MIN * 60ULL * 1000000ULL);
-  esp_deep_sleep_start();
+  // esp_sleep_enable_timer_wakeup(SLEEP_MIN * 60ULL * 1000000ULL);
+  // esp_deep_sleep_start();
 }
 
 void loop() {}

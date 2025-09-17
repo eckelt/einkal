@@ -63,12 +63,9 @@ std::vector<CalLayoutBox> computeCalendarLayout(const std::vector<CalLayoutInput
         }
     }
 
-    std::vector<CalLayoutBox> result;
-    result.reserve(inputs.size());
-
+    std::vector<CalLayoutBox> result; result.reserve(inputs.size());
     for (auto &g : groups) {
-        // Column assignment within group
-        std::vector<int> colEnd; // per column endMin
+        std::vector<int> colEnd;
         struct LocalPlaced { size_t vecIdx; int col; };
         std::vector<LocalPlaced> local;
         for (size_t gi : g.indices) {
@@ -90,14 +87,11 @@ std::vector<CalLayoutBox> computeCalendarLayout(const std::vector<CalLayoutInput
             if (iv.endMin > colEnd[col]) colEnd[col] = iv.endMin;
         }
         int totalCols = (int)colEnd.size();
-        // Emit results
         for (auto &lp : local) {
             const auto &iv = intervals[lp.vecIdx];
             result.push_back({iv.idx, lp.col, totalCols, iv.endIso});
         }
     }
-
-    // Restore original event order for stable drawing order top->down using start
     std::sort(result.begin(), result.end(), [&](const CalLayoutBox& a, const CalLayoutBox& b){
         const auto &A = intervals[a.eventIndex];
         const auto &B = intervals[b.eventIndex];

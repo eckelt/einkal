@@ -22,4 +22,5 @@ struct CalLayoutBox {
 //  * If same start, longer duration -> left.
 //  * Two parallel events -> each spans half width (groupColumns=2 used by renderer).
 //  * More than two -> equal width columns.
+// Original simple layout (one box per event).
 std::vector<CalLayoutBox> computeCalendarLayout(const std::vector<CalLayoutInput>& inputs);
