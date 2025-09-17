@@ -14,6 +14,7 @@
 #include <FS.h>
 #include <SPIFFS.h>
 #include <ArduinoJson.h>
+#include <CalLayout.h>  // local library in lib/CalLayout/
 
 // ==== Your display pins (as in your working demo) ====
 #define EPD_PWR 6
@@ -27,7 +28,7 @@
 GxEPD2_4C<GxEPD2_0579c_GDEY0579F51, GxEPD2_0579c_GDEY0579F51::HEIGHT> display(
     GxEPD2_0579c_GDEY0579F51(EPD_CS, EPD_DC, EPD_RST, EPD_BUSY));
 
-// ====== WiFi + ICS URL ======
+// WiFi credentials will be loaded from /wifi.json (SPIFFS)
 
 // ====== Sleep 30 minutes ======
 static const uint64_t SLEEP_MIN = 30ULL;
@@ -99,6 +100,64 @@ bool parseCalendarJson(const String &jsonStr, JsonDocument &doc)
   return true;
 }
 
+// ==== WiFi credentials handling ====
+struct WifiCred { String ssid; String pass; };
+
+// Expected JSON format in /wifi.json (uploaded via SPIFFS data upload):
+// [
+//   { "ssid": "PrimaryNet", "password": "secretPW" },
+//   { "ssid": "BackupNet",  "password": "backupPW" }
+// ]
+// The code will iterate in order and connect to the first AP that succeeds.
+std::vector<WifiCred> loadWifiCredentials(const char* path = "/wifi.json") {
+  std::vector<WifiCred> creds;
+  String json = loadFile(path);
+  if (json.isEmpty()) {
+    Serial.println("Keine WiFi JSON geladen.");
+    return creds;
+  }
+  JsonDocument doc;
+  if (deserializeJson(doc, json)) {
+    Serial.println("WiFi JSON Parse Fehler");
+    return creds;
+  }
+  if (!doc.is<JsonArray>()) {
+    Serial.println("WiFi JSON kein Array");
+    return creds;
+  }
+  for (JsonObject o : doc.as<JsonArray>()) {
+    const char* ssid = o["ssid"] | (const char*)nullptr;
+    const char* pw = o["password"] | "";
+    if (ssid && strlen(ssid)) {
+      creds.push_back({String(ssid), String(pw)});
+    }
+  }
+  Serial.printf("%u WiFi Credentials geladen.\n", (unsigned)creds.size());
+  return creds;
+}
+
+bool connectAnyWifi(const std::vector<WifiCred>& creds, uint32_t perApTimeoutMs = 8000) {
+  for (const auto& c : creds) {
+    Serial.printf("Verbinde mit SSID '%s'...\n", c.ssid.c_str());
+    WiFi.begin(c.ssid.c_str(), c.pass.c_str());
+    uint32_t start = millis();
+    while (WiFi.status() != WL_CONNECTED && (millis() - start) < perApTimeoutMs) {
+      delay(300);
+      Serial.print('.');
+    }
+    Serial.println();
+    if (WiFi.status() == WL_CONNECTED) {
+      Serial.printf("Verbunden: %s  IP=%s\n", c.ssid.c_str(), WiFi.localIP().toString().c_str());
+      return true;
+    } else {
+      Serial.printf("Fehlgeschlagen: %s\n", c.ssid.c_str());
+      WiFi.disconnect(true);
+      delay(200);
+    }
+  }
+  return false;
+}
+
 // Helper: Get today's date as YYYY-MM-DD
 String getTodayString()
 {
@@ -168,67 +227,70 @@ void drawTimelineAxis()
   }
 }
 
-// Helper: Draw events on timeline
+// Helper: Draw events using external layout engine
 void drawEvents(const std::vector<Event> &events)
 {
   display.setFont(&FreeSansBold7pt7b);
-  if (events.size() == 0)
-  {
+  if (events.empty()) {
     display.setCursor(50, TIMELINE_Y_START + 20);
     display.print("Keine Termine heute.");
     return;
   }
-  for (const auto &evt : events)
-  {
-    // Calculate end time
-    String endStr = evt.end.length() > 0 ? evt.end : evt.start;
-    if (endStr == evt.start)
-    {
-      int t_pos = evt.start.indexOf('T');
-      int hour = TIMELINE_START_HOUR, min = 0;
-      if (t_pos > 0 && evt.start.length() > t_pos + 5)
-      {
-        hour = evt.start.substring(t_pos + 1, t_pos + 3).toInt();
-        min = evt.start.substring(t_pos + 4, t_pos + 6).toInt();
-      }
-      char buf[25];
-      sprintf(buf, "%04d-%02d-%02dT%02d:%02d:00+0000", evt.start.substring(0, 4).toInt(), evt.start.substring(5, 7).toInt(), evt.start.substring(8, 10).toInt(), hour + 1, min);
-      endStr = String(buf);
+
+  // Build layout input
+  std::vector<CalLayoutInput> inputs;
+  inputs.reserve(events.size());
+  for (auto &e : events) inputs.push_back({e.start, e.end});
+
+  auto layout = computeCalendarLayout(inputs);
+
+  const int xBase = 20;
+  const int innerWidth = 248;
+  const int gap = 4;
+
+  for (auto &box : layout) {
+    const Event &evt = events[box.eventIndex];
+    // Compute y positions using original start and effective end
+    int yStart = timeToY(evt.start);
+    int yEnd = timeToY(box.effectiveEnd);
+    if (yEnd <= yStart) yEnd = yStart + 22;
+
+    int cols = box.groupColumns;
+    int box_w;
+    if (cols == 2) {
+      box_w = (innerWidth - gap) / 2; // half width rule
+    } else {
+      box_w = (innerWidth - gap * (cols - 1)) / cols;
     }
-    int y_start = timeToY(evt.start);
-    int y_end = timeToY(endStr);
-    int box_x = 20;
-    int box_y = y_start + 1;
-    int box_w = 248;
-    int box_h = max(22, y_end - y_start - 2);
+    int box_x = xBase + box.column * (box_w + gap);
+    int box_y = yStart + 1;
+    int box_h = max(22, yEnd - yStart - 2);
+
     display.fillRect(box_x, box_y, box_w, box_h, GxEPD_YELLOW);
 
-    // Event title
     display.setFont(&FreeSansBold7pt7b);
-    display.setCursor(box_x + 6, box_y + 15);
-    display.write(evt.title.substring(0, 32).c_str());
+    display.setCursor(box_x + 4, box_y + 14);
+    int maxChars = (box_w / 6) * 2; // crude fit heuristic
+    display.write(evt.title.substring(0, max(4, maxChars)).c_str());
 
-    // Organizer
     display.setFont(&FreeSans6pt7b);
-    display.setCursor(box_x + 6, box_y + 30);
-    display.write(evt.organizer.c_str());
+    display.setCursor(box_x + 4, box_y + 28);
+    display.write(evt.organizer.substring(0, max(4, maxChars)).c_str());
 
-    // Location
-    display.setCursor(box_x + 6, box_y + 42);
-    display.write(evt.location.substring(0, 32).c_str());
+    display.setCursor(box_x + 4, box_y + 40);
+    display.write(evt.location.substring(0, max(4, maxChars)).c_str());
 
-    // Icons
-    if (evt.isRecurring)
-    {
+    int iconX = box_x + box_w - 14;
+    if (evt.isRecurring) {
       if (evt.isMoved)
-        display.drawBitmap(box_x + 235, box_y + 1, epd_bitmap_series_mov, 13, 12, GxEPD_BLACK);
+        display.drawBitmap(iconX, box_y + 1, epd_bitmap_series_mov, 13, 12, GxEPD_BLACK);
       else
-        display.drawBitmap(box_x + 235, box_y + 1, epd_bitmap_series, 12, 12, GxEPD_BLACK);
+        display.drawBitmap(iconX, box_y + 1, epd_bitmap_series, 12, 12, GxEPD_BLACK);
     }
     if (evt.isOnlineMeeting)
-      display.drawBitmap(box_x + 235, box_y + box_h - 12, epd_bitmap_Teams, 12, 12, GxEPD_BLACK);
+      display.drawBitmap(iconX, box_y + box_h - 12, epd_bitmap_Teams, 12, 12, GxEPD_BLACK);
     if (evt.hasAttachments)
-      display.drawBitmap(box_x + 225, box_y + 2, epd_bitmap_attachment, 10, 12, GxEPD_BLACK);
+      display.drawBitmap(iconX - 10, box_y + 2, epd_bitmap_attachment, 10, 12, GxEPD_BLACK);
     if (evt.isImportant)
       display.drawBitmap(box_x + 1, box_y + 5, epd_bitmap_important, 6, 11, GxEPD_RED);
   }
@@ -238,31 +300,26 @@ void setup()
 {
   Serial.begin(115200);
 
-  // Connect WiFi
-  WiFi.begin(WIFI_SSID, WIFI_PASS);
-  Serial.print("Verbinde mit WiFi...");
-  int wifiTries = 0;
-  while (WiFi.status() != WL_CONNECTED && wifiTries < 20)
-  {
-    delay(500);
-    Serial.print(".");
-    wifiTries++;
+  // Mount SPIFFS early (needed for wifi.json)
+  if (!mountSPIFFS()) return;
+
+  // Load and connect to first available WiFi from list
+  std::vector<WifiCred> creds = loadWifiCredentials();
+  if (creds.empty()) {
+    Serial.println("Keine WiFi Zugangsdaten gefunden. Gehe schlafen.");
+    esp_sleep_enable_timer_wakeup(5ULL * 60ULL * 1000000ULL);
+    esp_deep_sleep_start();
   }
-  if (WiFi.status() == WL_CONNECTED)
-  {
-    Serial.println("\nWiFi verbunden!");
-  }
-  else
-  {
-    Serial.println("\nWiFi Verbindung fehlgeschlagen!");
-    return;
+  if (!connectAnyWifi(creds)) {
+    Serial.println("Keine Verbindung zu den konfigurierten WLANs möglich. Schlafe 5min.");
+    esp_sleep_enable_timer_wakeup(5ULL * 60ULL * 1000000ULL);
+    esp_deep_sleep_start();
   }
 
   // Zeit per NTP holen
   configTime(0, 0, "pool.ntp.org", "time.nist.gov");
 
-  if (!mountSPIFFS())
-    return;
+  // SPIFFS already mounted above
 
   pinMode(EPD_PWR, OUTPUT);
   digitalWrite(EPD_PWR, 1);
