@@ -52,6 +52,32 @@ class CalendarCharCallbacks : public NimBLECharacteristicCallbacks {
     if (v.empty()) return;
 
     // Neuer Transfer erwartet ersten Chunk mit "LEN:<zahl>\n"
+    // Sonderkommando: TIME:<epochSeconds>\n  -> setzt Systemzeit (UTC) und kehrt zurück
+    if (!bleTransferActive && v.rfind("TIME:", 0) == 0) {
+      size_t nl = v.find('\n');
+      if (nl == std::string::npos) {
+        Serial.println("TIME Header ohne Newline – ignoriert.");
+        return;
+      }
+      std::string num = v.substr(5, nl-5);
+      long long epoch = atoll(num.c_str());
+      if (epoch > 100000) {
+        struct timeval tv;
+        tv.tv_sec = (time_t)epoch;
+        tv.tv_usec = 0;
+        if (settimeofday(&tv, nullptr) == 0) {
+          Serial.printf("Zeit per BLE gesetzt (UTC Epoch): %lld\n", epoch);
+          // Sicherstellen, dass Zeitzone gesetzt ist (falls WiFi/NTP übersprungen wurde)
+          setenv("TZ","CET-1CEST,M3.5.0,M10.5.0/3",1); tzset();
+        } else {
+          Serial.println("settimeofday fehlgeschlagen");
+        }
+      } else {
+        Serial.println("TIME Wert ungueltig");
+      }
+      return; // kein Kalendertransfer starten
+    }
+
     if (!bleTransferActive) {
       if (v.rfind("LEN:", 0) == 0) {
         size_t nlPos = v.find('\n');
@@ -609,16 +635,21 @@ void setup()
   // BLE früh initialisieren (unabhängig von WiFi)
   initBLE();
 
+  // Zeitzone immer konfigurieren, auch ohne WiFi/NTP.
+  // Regel: CET (UTC+1) / CEST (UTC+2) mit Wechsel letzte So im März & Oktober.
+  setenv("TZ","CET-1CEST,M3.5.0,M10.5.0/3",1); tzset();
+  Serial.println("TZ gesetzt: CET/CEST");
+
   // (Optional: WiFi überspringen, wenn du rein BLE willst)
-  std::vector<WifiCred> creds = loadWifiCredentials();
-  if (!creds.empty() && connectAnyWifi(creds)) {
-    configTime(0,0,"pool.ntp.org","time.nist.gov");
-    setenv("TZ","CET-1CEST,M3.5.0,M10.5.0/3",1); tzset();
-    struct tm tmpCheck; int retries=0;
-    while (!getLocalTime(&tmpCheck) && retries < 20) { delay(200); retries++; }
-  } else {
-    Serial.println("WiFi nicht verbunden – Zeit evtl. ungueltig bis späteres BLE-Update.");
-  }
+  // std::vector<WifiCred> creds = loadWifiCredentials();
+  // if (!creds.empty() && connectAnyWifi(creds)) {
+  //   configTime(0,0,"pool.ntp.org","time.nist.gov");
+  //   setenv("TZ","CET-1CEST,M3.5.0,M10.5.0/3",1); tzset();
+  //   struct tm tmpCheck; int retries=0;
+  //   while (!getLocalTime(&tmpCheck) && retries < 20) { delay(200); retries++; }
+  // } else {
+  //   Serial.println("WiFi nicht verbunden – Zeit evtl. ungueltig bis späteres BLE-Update.");
+  // }
 
   pinMode(EPD_PWR, OUTPUT);
   digitalWrite(EPD_PWR, HIGH);

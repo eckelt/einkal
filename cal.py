@@ -121,7 +121,7 @@ def condense_events(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return out
 
 # ---------------- BLE Send -----------------
-async def ble_send(json_path: str, address: Optional[str], chunk_size: int, max_payload: int, debug: bool = False, name_prefix: str = "CalSync", force_resp: bool = False, chunk_delay: float = 0.0):
+async def ble_send(json_path: str, address: Optional[str], chunk_size: int, max_payload: int, debug: bool = False, name_prefix: str = "CalSync", force_resp: bool = False, chunk_delay: float = 0.0, send_time: bool = False, time_only: bool = False):
     if BleakScanner is None or BleakClient is None:
         print("Bleak nicht installiert (pip install bleak)")
         return False
@@ -169,6 +169,16 @@ async def ble_send(json_path: str, address: Optional[str], chunk_size: int, max_
         if not client.is_connected:
             print("Verbindung fehlgeschlagen.")
             return False
+        # Zeit vorab senden
+        if send_time:
+            import time
+            epoch = int(time.time())
+            time_hdr = f"TIME:{epoch}\n".encode("utf-8")
+            if debug: print(f"Sende Zeit: {epoch}")
+            await client.write_gatt_char(BLE_CHARACTERISTIC_UUID, time_hdr, response=True)
+            if time_only:
+                print("Nur Zeit gesendet (--ble-time-only).")
+                return True
         if combined_mode:
             packet = header_bytes + data_bytes
             if debug: print(f"Sende kombinierten Frame ({len(packet)} Bytes)")
@@ -220,6 +230,8 @@ def build_arg_parser():
     p.add_argument("--ble-name", default="CalSync", help="Name prefix to match (default CalSync)")
     p.add_argument("--ble-force-response", action="store_true", help="Send every BLE data chunk with Write Response (slower, more reliable)")
     p.add_argument("--ble-chunk-delay", type=float, default=0.0, help="Sleep seconds between BLE chunks (e.g. 0.02)")
+    p.add_argument("--ble-send-time", action="store_true", help="Send current time (epoch UTC) before calendar")
+    p.add_argument("--ble-time-only", action="store_true", help="Only send time (no calendar payload)")
     return p
 
 def main():
@@ -247,7 +259,18 @@ def main():
 
     if args.ble:
         print("Starte BLE Übertragung...")
-        ok = asyncio.run(ble_send(args.output, args.ble_address, args.chunk_size, args.max_payload, args.ble_debug, args.ble_name, args.ble_force_response, args.ble_chunk_delay))
+        ok = asyncio.run(ble_send(
+            args.output,
+            args.ble_address,
+            args.chunk_size,
+            args.max_payload,
+            args.ble_debug,
+            args.ble_name,
+            args.ble_force_response,
+            args.ble_chunk_delay,
+            args.ble_send_time,
+            args.ble_time_only
+        ))
         return 0 if ok else 1
     return 0
 
