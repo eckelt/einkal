@@ -18,6 +18,165 @@
 #include <SPIFFS.h>
 #include <ArduinoJson.h>
 #include <CalLayout.h> // local library in lib/CalLayout/
+#include <NimBLEDevice.h>  // BLE hinzu
+#include <NimBLEUtils.h>
+
+// ==== BLE UUIDs (beliebig, nur konsistent bleiben) ====
+static const char* BLE_SERVICE_UUID       = "7e20c560-55dd-4c7a-9c61-8f6ea7d7c301";
+static const char* BLE_CHARACTERISTIC_UUID = "9c5a5dd9-3c40-4e58-9d0a-95bf7cb9d302";
+
+// Buffer für eingehende Kalenderdaten
+static String bleIncoming; // legacy (will phase out)
+static size_t bleExpectedLen = 0;
+static bool   bleTransferActive = false;
+static unsigned long bleLastChunkMillis = 0;
+static const uint32_t BLE_TRANSFER_TIMEOUT_MS = 5000;
+static char* bleBuffer = nullptr;
+static size_t bleBufferWritePos = 0;
+static const size_t BLE_MAX_PAYLOAD = 60000; // sanity limit to avoid huge allocations
+
+// Vorwärtsdeklaration
+bool updateCalendarFromJson(const String& jsonStr, bool forceRefresh);
+void saveCalendarFile(const String& jsonStr) {
+  File f = SPIFFS.open("/calendar-condensed.json", "w");
+  if (!f) { Serial.println("Kalender-Datei speichern fehlgeschlagen!"); return; }
+  f.print(jsonStr);
+  f.close();
+  Serial.println("Kalender-Datei gespeichert (/calendar-condensed.json).");
+}
+
+// BLE Callback
+class CalendarCharCallbacks : public NimBLECharacteristicCallbacks {
+  void onWrite(NimBLECharacteristic* chr, NimBLEConnInfo& connInfo) override {
+    std::string v = chr->getValue();
+    if (v.empty()) return;
+
+    // Neuer Transfer erwartet ersten Chunk mit "LEN:<zahl>\n"
+    if (!bleTransferActive) {
+      if (v.rfind("LEN:", 0) == 0) {
+        size_t nlPos = v.find('\n');
+        if (nlPos == std::string::npos) {
+          Serial.println("LEN Header ohne Newline – Chunk verworfen.");
+          return;
+        }
+        std::string headerStd = v.substr(0, nlPos); // z.B. "LEN:1234"
+        if (headerStd.size() < 5) {
+          Serial.println("LEN Header zu kurz – verworfen.");
+          return;
+        }
+        long declared = strtol(headerStd.c_str() + 4, nullptr, 10);
+        if (declared <= 0) {
+          Serial.println("LEN Wert ungültig (<=0) – verworfen.");
+          return;
+        }
+        if (declared > (long)BLE_MAX_PAYLOAD) {
+          Serial.printf("LEN %ld überschreitet Limit (%u) – verworfen.\n", declared, (unsigned)BLE_MAX_PAYLOAD);
+          return;
+        }
+        bleExpectedLen = (size_t)declared;
+        // Allocate / reallocate buffer
+        if (bleBuffer) { free(bleBuffer); bleBuffer = nullptr; }
+        bleBuffer = (char*)malloc(bleExpectedLen + 1);
+        if (!bleBuffer) {
+          Serial.println("Malloc fehlgeschlagen – Abbruch.");
+          return;
+        }
+        bleBufferWritePos = 0;
+        size_t restOffset = nlPos + 1; // nach dem '\n'
+        if (restOffset < v.size()) {
+          std::string rest = v.substr(restOffset);
+          size_t restLen = rest.size();
+          if (restLen) {
+            if (restLen > bleExpectedLen) restLen = bleExpectedLen; // clamp
+            memcpy(bleBuffer, rest.data(), restLen);
+            bleBufferWritePos = restLen;
+          }
+          Serial.printf("(Header Chunk enthielt bereits %u Payload-Bytes)\n", (unsigned)restLen);
+        } else {
+          Serial.println("(Header Chunk ohne sofortige Payload)");
+        }
+        bleTransferActive = true;
+        bleLastChunkMillis = millis();
+        Serial.printf("BLE Transfer gestartet. Erwartete Länge: %u\n", (unsigned)bleExpectedLen);
+      } else {
+        Serial.println("Erster Chunk ohne LEN:-Header – ignoriert.");
+        return;
+      }
+    } else {
+      // Fortsetzungs-Chunks direkt in Buffer kopieren
+      size_t addLen = v.size();
+      if (bleBufferWritePos + addLen > bleExpectedLen) {
+        addLen = bleExpectedLen - bleBufferWritePos; // clamp overflow
+      }
+      if (addLen) memcpy(bleBuffer + bleBufferWritePos, v.data(), addLen);
+      bleBufferWritePos += addLen;
+      bleLastChunkMillis = millis();
+    }
+
+    // Fortschritt / Abschluss prüfen
+    if (bleTransferActive) {
+      size_t have = bleBufferWritePos;
+      Serial.printf("BLE Fortschritt: %u / %u (%.1f%%)\n", (unsigned)have, (unsigned)bleExpectedLen, (have * 100.0f) / bleExpectedLen);
+      if (have >= bleExpectedLen) {
+        Serial.println("BLE Transfer komplett. Prüfe / speichere JSON...");
+        bleTransferActive = false;
+        if (bleBuffer) bleBuffer[bleExpectedLen] = '\0';
+        String jsonStr = String(bleBuffer ? bleBuffer : "");
+        saveCalendarFile(jsonStr);
+        if (!updateCalendarFromJson(jsonStr, true)) {
+          Serial.println("JSON Update fehlgeschlagen.");
+        }
+        bleExpectedLen = 0;
+        if (bleBuffer) { free(bleBuffer); bleBuffer = nullptr; }
+        bleBufferWritePos = 0;
+      }
+    }
+  }
+};
+
+class RestartAdvServerCallbacks : public NimBLEServerCallbacks {
+  void onConnect(NimBLEServer* s, NimBLEConnInfo& connInfo) override {
+    Serial.println("BLE verbunden");
+  }
+  void onDisconnect(NimBLEServer* s, NimBLEConnInfo& connInfo, int reason) override {
+    Serial.println("BLE getrennt. Starte Advertising neu...");
+    NimBLEDevice::startAdvertising();
+  }
+};
+
+void initBLE() {
+  NimBLEDevice::init("CalSync");
+  // Sendeleistung setzen (abhängig von Core / NimBLE Version).
+  // Manche Versionen kennen nur ESP_PWR_LVL_P9 / P6 / P3 / N0 etc.
+#if defined(ESP_PWR_LVL_P9)
+  NimBLEDevice::setPower(ESP_PWR_LVL_P9); // höchste verfügbare Stufe
+#elif defined(ESP_PWR_LVL_P7)
+  NimBLEDevice::setPower(ESP_PWR_LVL_P7);
+#elif defined(ESP_PWR_LVL_P6)
+  NimBLEDevice::setPower(ESP_PWR_LVL_P6);
+#else
+  // Fallback: numerischer Wert (0..9); nur nutzen falls Makros fehlen.
+  NimBLEDevice::setPower(7);
+#endif
+  NimBLEDevice::setMTU(247); // größere MTU für weniger Chunks
+  NimBLEServer* server = NimBLEDevice::createServer();
+  server->setCallbacks(new RestartAdvServerCallbacks());
+  NimBLEService* svc = server->createService(BLE_SERVICE_UUID);
+  NimBLECharacteristic* chr = svc->createCharacteristic(
+      BLE_CHARACTERISTIC_UUID,
+      NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR
+  );
+  chr->setCallbacks(new CalendarCharCallbacks());
+  svc->start();
+  NimBLEAdvertising* adv = NimBLEDevice::getAdvertising();
+  adv->addServiceUUID(BLE_SERVICE_UUID);
+  // Manche NimBLE-Versionen besitzen setScanResponse() nicht – Name trotzdem im ADV erzwingen
+  // indem der Gerätename gesetzt wird (bereits durch init), optional nochmals:
+  adv->setName("CalSync");
+  adv->setAppearance(0x0000);
+  adv->start();
+  Serial.println("BLE bereit (Service: CalSync). Erster Chunk: LEN:<bytes>\\n...");
+}
 
 // ==== Your display pins (Lolin S2 Mini) ====
 // #define EPD_PWR 6
@@ -32,7 +191,7 @@
 #define EPD_DC 4 // D2 green
 #define EPD_RST 5 // D3 white
 #define EPD_BUSY 3 // D1 violet
-#define EPD_PWR 2 // D0 brown
+#define EPD_PWR 21 // D6 brown
 
 #define EPD_SCK 6 // D4 yellow
 #define EPD_MOSI 10 // D10 blue
@@ -291,7 +450,9 @@ int minutesToY(int minutesFromMidnight)
 
 void drawEvents(const std::vector<Event> &events)
 {
-  display.setFont(&FreeSansBold7pt7b);
+  display.setFont(&FreeSansBold7pt7b);  
+  display.setTextColor(GxEPD_BLACK);
+
   if (events.empty()) {
     display.setCursor(50, TIMELINE_Y_START + 20);
     display.print("Keine Termine heute.");
@@ -393,6 +554,51 @@ void getGermanDateHeader(String &weekdayOut, String &dateOut)
   // if (weekdayOut.indexOf("ä") >= 0) { /* keep it; font likely supports */ }
   dateOut = String(timeinfo.tm_mday) + ". " + MONTH_DE[m];
 }
+
+// Extrahierter Anzeige-Update-Code (aus setup)
+bool updateCalendarFromJson(const String& jsonStr, bool forceRefresh) {
+  Serial.println("Kalender-Update von JSON...");
+
+  if (jsonStr.isEmpty()) return false;
+  JsonDocument doc;
+  if (!parseCalendarJson(jsonStr, doc)) return false;
+  String today = getTodayString();
+  if (today.isEmpty()) return false;
+
+  if (!forceRefresh && !isDateChanged(today.c_str(), lastDate)) {
+    Serial.println("Datum unverändert (BLE), kein Refresh.");
+    return true;
+  }
+  strncpy(lastDate, today.c_str(), sizeof(lastDate));
+
+  JsonArray events = doc.as<JsonArray>();
+  std::vector<Event> todaysEvents = findTodaysEvents(events, today);
+
+  display.setRotation(1);
+  display.fillScreen(GxEPD_WHITE);
+
+  String wday, dateLine;
+  getGermanDateHeader(wday, dateLine);
+  int headerH = 56;
+  display.fillRect(0, 0, display.width(), headerH, GxEPD_RED);
+  display.setTextColor(GxEPD_WHITE);
+  display.setFont(&FreeSansBold12pt7b);
+  display.setCursor(10, 22); display.print(wday);
+  display.setCursor(10, 46); display.print(dateLine);
+
+  // Status-Icons (optional unverändert)
+  display.drawBitmap(270 - 18, 6, epd_bitmap_batt, 16, 9, GxEPD_WHITE);
+  display.fillRect(270 - 18 + 2, 8, 11, 5, GxEPD_WHITE);
+
+  display.setTextColor(GxEPD_BLACK);
+  drawTimelineAxis();
+  drawEvents(todaysEvents);
+  drawUpdateTimestamp();
+  display.display(true);
+  Serial.println("Display aktualisiert (Kalender).");
+  return true;
+}
+
 void setup()
 {
   Serial.begin(115200);
@@ -400,108 +606,47 @@ void setup()
   // Mount SPIFFS early (needed for wifi.json)
   if (!mountSPIFFS()) return;
 
-  // Load and connect to first available WiFi from list
+  // BLE früh initialisieren (unabhängig von WiFi)
+  initBLE();
+
+  // (Optional: WiFi überspringen, wenn du rein BLE willst)
   std::vector<WifiCred> creds = loadWifiCredentials();
-  if (creds.empty()) {
-    Serial.println("Keine WiFi Zugangsdaten gefunden. Gehe schlafen.");
-    esp_sleep_enable_timer_wakeup(5ULL * 60ULL * 1000000ULL);
-    esp_deep_sleep_start();
+  if (!creds.empty() && connectAnyWifi(creds)) {
+    configTime(0,0,"pool.ntp.org","time.nist.gov");
+    setenv("TZ","CET-1CEST,M3.5.0,M10.5.0/3",1); tzset();
+    struct tm tmpCheck; int retries=0;
+    while (!getLocalTime(&tmpCheck) && retries < 20) { delay(200); retries++; }
+  } else {
+    Serial.println("WiFi nicht verbunden – Zeit evtl. ungueltig bis späteres BLE-Update.");
   }
-  if (!connectAnyWifi(creds)) {
-    Serial.println("Keine Verbindung zu den konfigurierten WLANs möglich. Schlafe 5min.");
-    esp_sleep_enable_timer_wakeup(5ULL * 60ULL * 1000000ULL);
-    esp_deep_sleep_start();
-  }
-
-  // Zeit per NTP holen (erst UTC, dann Zeitzone setzen)
-  configTime(0, 0, "pool.ntp.org", "time.nist.gov");
-  // Deutsche Zeitzone mit Sommerzeit-Regeln: CET/CEST
-  setenv("TZ", "CET-1CEST,M3.5.0,M10.5.0/3", 1); // letzter So im März 02:00 -> +1, letzter So im Okt 03:00 zurück
-  tzset();
-  // optional kurz warten bis Zeit da ist
-  struct tm tmpCheck; int retries=0;
-  while (!getLocalTime(&tmpCheck) && retries < 20) { delay(200); retries++; }
-
-  // SPIFFS already mounted above
 
   pinMode(EPD_PWR, OUTPUT);
   digitalWrite(EPD_PWR, HIGH);
   SPI.begin(EPD_SCK, -1, EPD_MOSI, EPD_CS);
   display.init();
 
+  // Start mit vorhandener Datei (falls vorhanden)
   String jsonStr = loadFile("/calendar-condensed.json");
-  if (jsonStr.isEmpty())
-    return;
-
-  JsonDocument doc;
-  if (!parseCalendarJson(jsonStr, doc))
-    return;
-  Serial.println(jsonStr);
-
-  String today = getTodayString();
-  if (today.isEmpty())
-    return;
-
-  // Only update display if date changed
-  if (isDateChanged(today.c_str(), lastDate)) {
-    strncpy(lastDate, today.c_str(), sizeof(lastDate));
-    JsonArray events = doc.as<JsonArray>();
-    std::vector<Event> todaysEvents = findTodaysEvents(events, today);
-
-    // Display events
-    display.setRotation(1);
-    display.setFont(&FreeSansBold12pt7b);
-    display.fillScreen(GxEPD_WHITE);
-    display.setCursor(80, 25);
-    display.fillRect(0, 0, display.width(), 40, GxEPD_RED);
-    display.setTextColor(GxEPD_WHITE);
-    display.print(today);
-    String wday, dateLine;
-    getGermanDateHeader(wday, dateLine);
-    // Header bar
-    int headerH = 56;
-    display.fillRect(0, 0, display.width(), headerH, GxEPD_RED);
-    display.setTextColor(GxEPD_WHITE);
-    // Weekday (bold large)
-    display.setFont(&FreeSansBold12pt7b);
-    display.setCursor(10, 22);
-    display.print(wday);
-    // Date line (smaller bold or same font if you prefer size consistency)
-    display.setCursor(10, 46);
-    display.print(dateLine);
-
-    // Battery icon
-    display.drawBitmap(270 - 18, 6, epd_bitmap_batt, 16, 9, GxEPD_WHITE);
-    display.fillRect(270 - 18 + 2, 8, 11, 5, GxEPD_WHITE);
-
-    // Bluetooth icon
-    display.drawBitmap(270 - 18 - 18, 4, epd_bitmap_bt, 11, 12, GxEPD_WHITE);
-
-    // WiFi SSID
-    int16_t x1, y1;
-    uint16_t w, h;
-    display.setFont(&FreeSans6pt7b);
-    display.getTextBounds(WiFi.SSID(), 0, 0, &x1, &y1, &w, &h);
-    display.drawBitmap(270 - 18 - 24 - w - 15, 5, epd_bitmap_wifi, 13, 10, GxEPD_WHITE);
-    display.setCursor(270 - 18 - 24 - w, 13);
-    display.print(WiFi.SSID());
-    display.setTextColor(GxEPD_BLACK);
-
-    drawTimelineAxis();
-    drawEvents(todaysEvents);
-    drawUpdateTimestamp();
-
-    display.display(true);
-  }
-  else
-  {
-    Serial.println("Date unchanged, skipping display update.");
+  if (!jsonStr.isEmpty()) {
+    updateCalendarFromJson(jsonStr, false);
+  } else {
+    Serial.println("Keine bestehende Kalender-Datei. Warte auf BLE Upload.");
   }
 
-  // Deep sleep for 30 minutes
-  // Serial.println("Going to deep sleep...");
-  // esp_sleep_enable_timer_wakeup(SLEEP_MIN * 60ULL * 1000000ULL);
-  // esp_deep_sleep_start();
+  // Deep Sleep erst wieder aktivieren, wenn BLE nicht ständig verfügbar sein soll.
+  // (Sonst würde Verbindung abbrechen.)
 }
 
-void loop() {}
+void loop()
+{
+  if (bleTransferActive) {
+    if (millis() - bleLastChunkMillis > BLE_TRANSFER_TIMEOUT_MS) {
+      Serial.println("BLE Transfer Timeout – Reset.");
+      bleTransferActive = false;
+      bleExpectedLen = 0;
+      if (bleBuffer) { free(bleBuffer); bleBuffer = nullptr; }
+      bleBufferWritePos = 0;
+    }
+  }
+  delay(200);
+}

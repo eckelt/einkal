@@ -1,3 +1,4 @@
 requests
 msal
 boto3
+bleak
