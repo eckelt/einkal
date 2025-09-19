@@ -249,8 +249,6 @@ def main():
         with open(args.output, 'w', encoding='utf-8') as f:
             json.dump(condensed, f, ensure_ascii=False, indent=2)
         print(f"{len(condensed)} Events gespeichert -> {args.output}")
-        for evt in condensed:
-            print(f"{evt['date']} | {evt['start']} – {evt['end']} | {evt['subject']}")
     else:
         print("Graph Fetch übersprungen (--no-fetch). Nutze vorhandene Datei.")
         if not os.path.exists(args.output):

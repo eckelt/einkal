@@ -21,6 +21,9 @@
 #include <NimBLEDevice.h>  // BLE hinzu
 #include <NimBLEUtils.h>
 
+// Optional Debug für Hash-Bildung aktivieren (1 = an, 0 = aus)
+#define CAL_HASH_DEBUG 1
+
 // ==== BLE UUIDs (beliebig, nur konsistent bleiben) ====
 static const char* BLE_SERVICE_UUID       = "7e20c560-55dd-4c7a-9c61-8f6ea7d7c301";
 static const char* BLE_CHARACTERISTIC_UUID = "9c5a5dd9-3c40-4e58-9d0a-95bf7cb9d302";
@@ -28,6 +31,7 @@ static const char* BLE_CHARACTERISTIC_UUID = "9c5a5dd9-3c40-4e58-9d0a-95bf7cb9d3
 // Buffer für eingehende Kalenderdaten
 static String bleIncoming; // legacy (will phase out)
 static size_t bleExpectedLen = 0;
+static bool bleForceOnFinish = false; // wird durch speziellen Header (LENF:) gesetzt
 static bool   bleTransferActive = false;
 static unsigned long bleLastChunkMillis = 0;
 static const uint32_t BLE_TRANSFER_TIMEOUT_MS = 5000;
@@ -79,18 +83,20 @@ class CalendarCharCallbacks : public NimBLECharacteristicCallbacks {
     }
 
     if (!bleTransferActive) {
-      if (v.rfind("LEN:", 0) == 0) {
+      if (v.rfind("LENF:", 0) == 0 || v.rfind("LEN:", 0) == 0) {
         size_t nlPos = v.find('\n');
         if (nlPos == std::string::npos) {
           Serial.println("LEN Header ohne Newline – Chunk verworfen.");
           return;
         }
-        std::string headerStd = v.substr(0, nlPos); // z.B. "LEN:1234"
+        std::string headerStd = v.substr(0, nlPos); // z.B. "LEN:1234" oder "LENF:1234"
         if (headerStd.size() < 5) {
           Serial.println("LEN Header zu kurz – verworfen.");
           return;
         }
-        long declared = strtol(headerStd.c_str() + 4, nullptr, 10);
+        bool force = (headerStd.rfind("LENF:", 0) == 0);
+        bleForceOnFinish = force; // merken
+        long declared = strtol(headerStd.c_str() + (force?5:4), nullptr, 10);
         if (declared <= 0) {
           Serial.println("LEN Wert ungültig (<=0) – verworfen.");
           return;
@@ -123,7 +129,7 @@ class CalendarCharCallbacks : public NimBLECharacteristicCallbacks {
         }
         bleTransferActive = true;
         bleLastChunkMillis = millis();
-        Serial.printf("BLE Transfer gestartet. Erwartete Länge: %u\n", (unsigned)bleExpectedLen);
+        Serial.printf("BLE Transfer gestartet. Erwartete Länge: %u  (force=%s)\n", (unsigned)bleExpectedLen, bleForceOnFinish?"ja":"nein");
       } else {
         Serial.println("Erster Chunk ohne LEN:-Header – ignoriert.");
         return;
@@ -149,12 +155,13 @@ class CalendarCharCallbacks : public NimBLECharacteristicCallbacks {
         if (bleBuffer) bleBuffer[bleExpectedLen] = '\0';
         String jsonStr = String(bleBuffer ? bleBuffer : "");
         saveCalendarFile(jsonStr);
-        if (!updateCalendarFromJson(jsonStr, true)) {
-          Serial.println("JSON Update fehlgeschlagen.");
+        if (!updateCalendarFromJson(jsonStr, bleForceOnFinish)) {
+          Serial.println("JSON Update fehlgeschlagen oder übersprungen.");
         }
         bleExpectedLen = 0;
         if (bleBuffer) { free(bleBuffer); bleBuffer = nullptr; }
         bleBufferWritePos = 0;
+        bleForceOnFinish = false;
       }
     }
   }
@@ -231,6 +238,7 @@ GxEPD2_4C<GxEPD2_0579c_GDEY0579F51, GxEPD2_0579c_GDEY0579F51::HEIGHT> display(
 static const uint64_t SLEEP_MIN = 30ULL;
 
 RTC_DATA_ATTR char lastDate[11] = ""; // RTC memory for last date (YYYY-MM-DD)
+RTC_DATA_ATTR uint32_t lastEventsHash = 0; // Hash der angezeigten Events dieses Tages
 
 // Timeline constants
 const int TIMELINE_START_HOUR = 8;
@@ -384,6 +392,20 @@ struct Event
   bool hasAttachments;
   bool isCanceled; // new
 };
+
+// FNV-1a 32-bit Hash für heutige Events (stabil, schnell, geringes Kollisionsrisiko für unseren Umfang)
+static uint32_t computeEventsHash(const std::vector<struct Event>& events) {
+  uint32_t h = 2166136261u; // FNV offset basis
+  for (auto &e : events) {
+    String line = e.start + "|" + e.end + "|" + e.title + "|" + e.location + "|" + e.organizer + "|" +
+                  (e.isCanceled?"C":"-") + (e.isOnlineMeeting?"O":"-") + (e.isRecurring?"R":"-") + (e.isImportant?"I":"-");
+    const char* p = line.c_str();
+    while (*p) { h ^= (uint8_t)*p++; h *= 16777619u; }
+    // Feldtrenner zwischen Events, damit (AB|C)(D) != (A)(B|CD)
+    h ^= (uint8_t)'\n'; h *= 16777619u;
+  }
+  return h;
+}
 
 std::vector<Event> findTodaysEvents(JsonArray events, const String &today)
 {
@@ -581,6 +603,21 @@ void getGermanDateHeader(String &weekdayOut, String &dateOut)
   dateOut = String(timeinfo.tm_mday) + ". " + MONTH_DE[m];
 }
 
+int battLvl(int Vbattf) {
+  if (Vbattf > 4.2) return 11;
+  if (Vbattf > 4.1) return 10;
+  if (Vbattf > 4) return 9;
+  if (Vbattf > 3.95) return 8;
+  if (Vbattf > 3.90) return 7;
+  if (Vbattf > 3.80) return 6;
+  if (Vbattf > 3.70) return 5;
+  if (Vbattf > 3.60) return 4;
+  if (Vbattf > 3.50) return 3;
+  if (Vbattf > 3.40) return 2;
+  if (Vbattf > 3.30) return 1;
+  return 0;
+}
+
 // Extrahierter Anzeige-Update-Code (aus setup)
 bool updateCalendarFromJson(const String& jsonStr, bool forceRefresh) {
   Serial.println("Kalender-Update von JSON...");
@@ -591,14 +628,24 @@ bool updateCalendarFromJson(const String& jsonStr, bool forceRefresh) {
   String today = getTodayString();
   if (today.isEmpty()) return false;
 
-  if (!forceRefresh && !isDateChanged(today.c_str(), lastDate)) {
-    Serial.println("Datum unverändert (BLE), kein Refresh.");
+  bool dateChanged = isDateChanged(today.c_str(), lastDate);
+
+  // Events extrahieren (aber erst Hash bilden, dann ggf. abbrechen)
+  JsonArray events = doc.as<JsonArray>();
+  std::vector<Event> todaysEvents = findTodaysEvents(events, today);
+
+  uint32_t newHash = computeEventsHash(todaysEvents);
+  #if CAL_HASH_DEBUG
+    Serial.printf("Hash Check: date=%s events=%u new=0x%08lX prev=0x%08lX force=%d dateChanged=%d\n",
+                  today.c_str(), (unsigned)todaysEvents.size(), (unsigned long)newHash, (unsigned long)lastEventsHash,
+                  (int)forceRefresh, (int)dateChanged);
+  #endif
+  if (!forceRefresh && !dateChanged && newHash == lastEventsHash) {
+    Serial.println("Unverändert (Datum & Events-Hash) – kein Redraw.");
     return true;
   }
   strncpy(lastDate, today.c_str(), sizeof(lastDate));
-
-  JsonArray events = doc.as<JsonArray>();
-  std::vector<Event> todaysEvents = findTodaysEvents(events, today);
+  lastEventsHash = newHash;
 
   display.setRotation(1);
   display.fillScreen(GxEPD_WHITE);
@@ -612,9 +659,17 @@ bool updateCalendarFromJson(const String& jsonStr, bool forceRefresh) {
   display.setCursor(10, 22); display.print(wday);
   display.setCursor(10, 46); display.print(dateLine);
 
-  // Status-Icons (optional unverändert)
+  // Status-Icons (optional unverändert) 
+  uint32_t Vbatt = 0;
+  for(int i = 0; i < 16; i++) {
+    Vbatt = Vbatt + analogReadMilliVolts(A0); // ADC with correction   
+  }
+  float Vbattf = 2 * Vbatt / 16 / 1000.0;     // attenuation ratio 1/2, mV --> V
+  Serial.println(Vbattf, 3);
   display.drawBitmap(270 - 18, 6, epd_bitmap_batt, 16, 9, GxEPD_WHITE);
-  display.fillRect(270 - 18 + 2, 8, 11, 5, GxEPD_WHITE);
+  display.fillRect(270 - 18 + 2, 8, battLvl(Vbattf), 5, GxEPD_WHITE);
+
+  display.drawBitmap(270 - 18 - 16, 3, epd_bitmap_bt, 11, 12, GxEPD_WHITE);
 
   display.setTextColor(GxEPD_BLACK);
   drawTimelineAxis();
@@ -628,6 +683,8 @@ bool updateCalendarFromJson(const String& jsonStr, bool forceRefresh) {
 void setup()
 {
   Serial.begin(115200);
+
+  pinMode(A0, INPUT); 
 
   // Mount SPIFFS early (needed for wifi.json)
   if (!mountSPIFFS()) return;
