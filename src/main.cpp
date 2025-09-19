@@ -8,6 +8,7 @@
 #include <epd4c/GxEPD2_0579c_GDEY0579F51.h>
 #include <Fonts/FreeSansBold12pt7b.h>
 #include <Fonts/FreeSansBold7pt7b.h>
+#include <Fonts/FreeSans7pt7b.h>
 #include <Fonts/FreeSans6pt7b.h>
 #include <Fonts/Font5x7Fixed.h>
 #include <Fonts/Font4x5Fixed.h>
@@ -18,14 +19,23 @@
 #include <ArduinoJson.h>
 #include <CalLayout.h> // local library in lib/CalLayout/
 
-// ==== Your display pins (as in your working demo) ====
-#define EPD_PWR 6
-#define EPD_RST 8
-#define EPD_DC 9
-#define EPD_CS 10
-#define EPD_BUSY 7
-#define EPD_SCK 36
-#define EPD_MOSI 35
+// ==== Your display pins (Lolin S2 Mini) ====
+// #define EPD_PWR 6
+// #define EPD_RST 8
+// #define EPD_DC 9
+// #define EPD_CS 10
+// #define EPD_BUSY 7
+// #define EPD_SCK 36
+// #define EPD_MOSI 35
+// ==== Your display pins (Xiao ESP32C3) ====
+#define EPD_CS 7 // D5  orange
+#define EPD_DC 4 // D2 green
+#define EPD_RST 5 // D3 white
+#define EPD_BUSY 3 // D1 violet
+#define EPD_PWR 2 // D0 brown
+
+#define EPD_SCK 6 // D4 yellow
+#define EPD_MOSI 10 // D10 blue
 
 GxEPD2_4C<GxEPD2_0579c_GDEY0579F51, GxEPD2_0579c_GDEY0579F51::HEIGHT> display(
     GxEPD2_0579c_GDEY0579F51(EPD_CS, EPD_DC, EPD_RST, EPD_BUSY));
@@ -311,16 +321,17 @@ void drawEvents(const std::vector<Event> &events)
 
     // Cancelled style: white fill, yellow border; else yellow fill
     if (evt.isCanceled) {
+      display.setFont(&FreeSans7pt7b);
       display.fillRect(box_x, box_y, box_total_w, box_h, GxEPD_WHITE);
       display.drawRect(box_x, box_y, box_total_w, box_h, GxEPD_YELLOW);
     } else {
+      display.setFont(&FreeSansBold7pt7b);
       display.fillRect(box_x, box_y, box_total_w, box_h, GxEPD_YELLOW);
     }
 
     int textLeft = box_x + 4;
     int textWidth = box_total_w - 8;
     int cursorY = box_y + 12;
-    display.setFont(&FreeSansBold7pt7b);
     cursorY = drawWrapped(textLeft, cursorY, textWidth, evt.title, 2, 14);
     display.setFont(&Font5x7Fixed);
     cursorY = drawWrapped(textLeft, cursorY, textWidth, evt.organizer, 1, 12);
@@ -414,7 +425,7 @@ void setup()
   // SPIFFS already mounted above
 
   pinMode(EPD_PWR, OUTPUT);
-  digitalWrite(EPD_PWR, 1);
+  digitalWrite(EPD_PWR, HIGH);
   SPI.begin(EPD_SCK, -1, EPD_MOSI, EPD_CS);
   display.init();
 
@@ -471,7 +482,6 @@ void setup()
     uint16_t w, h;
     display.setFont(&FreeSans6pt7b);
     display.getTextBounds(WiFi.SSID(), 0, 0, &x1, &y1, &w, &h);
-    Serial.printf("Text bounds test %d x %d\n", w, h);
     display.drawBitmap(270 - 18 - 24 - w - 15, 5, epd_bitmap_wifi, 13, 10, GxEPD_WHITE);
     display.setCursor(270 - 18 - 24 - w, 13);
     display.print(WiFi.SSID());
@@ -489,7 +499,7 @@ void setup()
   }
 
   // Deep sleep for 30 minutes
-  Serial.println("Going to deep sleep...");
+  // Serial.println("Going to deep sleep...");
   // esp_sleep_enable_timer_wakeup(SLEEP_MIN * 60ULL * 1000000ULL);
   // esp_deep_sleep_start();
 }

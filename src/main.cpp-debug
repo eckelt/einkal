@@ -1,0 +1,79 @@
+#include <Arduino.h>
+#include <SPI.h>
+#include <GxEPD2_4C.h>
+#include <epd4c/GxEPD2_0579c_GDEY0579F51.h>
+
+// Pin-Setup (XIAO ESP32C3 – Debug)
+#define EPD_CS    4   // D5
+#define EPD_DC    7   // D2
+#define EPD_RST   5   // D3
+#define EPD_BUSY  3   // D1
+#define EPD_PWR 2 // D0 brown
+#define EPD_SCK   6   // D4
+#define EPD_MOSI 10   // D10
+// Kein MISO benötigt
+
+GxEPD2_4C<GxEPD2_0579c_GDEY0579F51, GxEPD2_0579c_GDEY0579F51::HEIGHT> display(
+  GxEPD2_0579c_GDEY0579F51(EPD_CS, EPD_DC, EPD_RST, EPD_BUSY)
+);
+
+void printBusy(const char* tag) {
+  Serial.printf("[BUSY %s] Pegel=%d\n", tag, digitalRead(EPD_BUSY));
+}
+
+void hardReset() {
+  pinMode(EPD_RST, OUTPUT);
+  digitalWrite(EPD_RST, HIGH);
+  delay(300);
+  digitalWrite(EPD_RST, LOW);
+  delay(300);
+  digitalWrite(EPD_RST, HIGH);
+  delay(300);
+}
+
+void setup() {
+  Serial.begin(115200);
+  delay(2000);
+  pinMode(EPD_PWR, OUTPUT);
+  digitalWrite(EPD_PWR, HIGH);
+  
+  Serial.println("\n=== E-Paper Diagnose Start ===");
+
+  pinMode(EPD_BUSY, INPUT);
+  hardReset();
+
+  // SPI initialisieren
+  SPI.end();
+  SPI.begin(EPD_SCK, -1, EPD_MOSI, EPD_CS);
+  Serial.printf("SPI Pins: SCK=%d MOSI=%d CS=%d DC=%d RST=%d BUSY=%d\n",
+                EPD_SCK, EPD_MOSI, EPD_CS, EPD_DC, EPD_RST, EPD_BUSY);
+
+  printBusy("vor init");
+  // display.init(115200, true, 2, false); // true = debug (falls gewünscht)
+  display.init();
+  printBusy("nach init");
+
+  // Testbild
+  display.setRotation(1);
+  display.fillScreen(GxEPD_WHITE);
+
+  // Farbblöcke
+  int w = display.width();
+  display.fillRect(0, 0, w, 80, GxEPD_RED);
+  display.fillRect(0, 80, w, 80, GxEPD_YELLOW);
+  display.fillRect(0, 160, w, 80, GxEPD_BLACK);
+
+  // Rahmen
+  display.drawRect(0, 0, w, display.height(), GxEPD_BLACK);
+
+  Serial.println("Starte Voll-Update...");
+  printBusy("vor display()");
+  display.display(true); // full refresh
+  printBusy("nach display()");
+
+  Serial.println("Diagnose fertig. Nichts weiter passiert.");
+}
+
+void loop() {
+  // leer
+}
